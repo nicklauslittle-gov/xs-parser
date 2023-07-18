@@ -312,6 +312,7 @@ public class Schema implements AnnotatedComponent {
 			.elements(0, Integer.MAX_VALUE, ElementValue.ANNOTATION)
 			.elements(0, Integer.MAX_VALUE, ElementValue.SIMPLETYPE, ElementValue.COMPLEXTYPE, ElementValue.GROUP_DECL, ElementValue.ATTRIBUTEGROUP, ElementValue.ELEMENT_DECL, ElementValue.ATTRIBUTE_DECL, ElementValue.NOTATION, ElementValue.ANNOTATION);
 
+	private final Schema parent;
 	private final DocumentResolver documentResolver;
 	private final NamespaceContext namespaceContext;
 	private final Document document;
@@ -344,12 +345,13 @@ public class Schema implements AnnotatedComponent {
 		if (EMPTY == this) {
 			return Collections.emptySet();
 		}
-		final Set<Schema> constituentSchemas = getConstituentSchemas();
-		constituentSchemas.remove(this);
-		return Collections.unmodifiableSet(constituentSchemas);
+		final Set<Schema> schemas = getConstituentSchemas();
+		schemas.remove(this);
+		return Collections.unmodifiableSet(schemas);
 	});
 
 	private Schema() {
+		this.parent = this;
 		this.documentResolver = DEFAULT_DOCUMENT_RESOLVER;
 		this.namespaceContext = null;
 		this.document = NodeHelper.newDocument();
@@ -380,7 +382,8 @@ public class Schema implements AnnotatedComponent {
 		this.location = null;
 	}
 
-	private Schema(final DocumentResolver documentResolver, final NamespaceContext namespaceContext, final Document document, final String location, final Map<Map.Entry<String, URI>, Document> schemaDocumentCache, final Map<Document, Schema> schemaCache) {
+	private Schema(final Schema parent, final DocumentResolver documentResolver, final NamespaceContext namespaceContext, final Document document, final String location, final Map<Map.Entry<String, URI>, Document> schemaDocumentCache, final Map<Document, Schema> schemaCache) {
+		this.parent = parent == null ? this : parent;
 		this.documentResolver = documentResolver;
 		this.namespaceContext = namespaceContext;
 		this.document = document;
@@ -479,7 +482,7 @@ public class Schema implements AnnotatedComponent {
 	}
 
 	public Schema(final DocumentResolver documentResolver, final NamespaceContext namespaceContext, final Document document) {
-		this(documentResolver, namespaceContext, document, document.getDocumentURI(), new HashMap<>(), new HashMap<>());
+		this(null, documentResolver, namespaceContext, document, document.getDocumentURI(), new HashMap<>(), new HashMap<>());
 	}
 
 	private static <T extends SchemaComponent> void checkIfUnique(final Deque<T> ls, final Function<T, String> name, final Function<T, String> targetNamespace) {
@@ -503,12 +506,12 @@ public class Schema implements AnnotatedComponent {
 	}
 
 	private Set<Schema> getConstituentSchemas() {
-		final Set<Schema> constituentSchemas = new LinkedHashSet<>();
-		imports.forEach(i -> constituentSchemas.add(i.importedSchema()));
-		includes.forEach(i -> constituentSchemas.add(i.includedSchema()));
-		overrides.forEach(o -> constituentSchemas.add(o.includedSchema()));
-		redefines.forEach(r -> constituentSchemas.add(r.includedSchema()));
-		return constituentSchemas;
+		final Set<Schema> schemas = new LinkedHashSet<>();
+		imports.forEach(i -> schemas.add(i.importedSchema()));
+		includes.forEach(i -> schemas.add(i.includedSchema()));
+		overrides.forEach(o -> schemas.add(o.includedSchema()));
+		redefines.forEach(r -> schemas.add(r.includedSchema()));
+		return schemas;
 	}
 
 	// Used by XPathEvaluator via reflection
@@ -568,7 +571,7 @@ public class Schema implements AnnotatedComponent {
 			if (fn == null) {
 				throw new IllegalArgumentException("No finder for " + cls);
 			}
-			final T t = (T) fn.apply(this, name).get();
+			final T t = (T) fn.apply(parent, name).get();
 			if (t != null) {
 				return t;
 			}
@@ -610,7 +613,7 @@ public class Schema implements AnnotatedComponent {
 			if (schema != null) {
 				return schema;
 			}
-			return new Schema(documentResolver(), namespaceContext(), doc, schemaLocation != null ? schemaLocation : doc.getDocumentURI(), schemaDocumentCache, schemaCache);
+			return new Schema(parent, documentResolver(), namespaceContext(), doc, schemaLocation != null ? schemaLocation : doc.getDocumentURI(), schemaDocumentCache, schemaCache);
 		}
 	}
 
